@@ -9,36 +9,19 @@ LIBFOO_H=${MODULE}.h
 TEST_LIBFOO_C=test_${MODULE}.c
 README_MD=README.md
 ANDROID_MK=Android.mk
+NMAKE=Makefile.nmake
 VERSION_SH=version.sh
 
 LIBFOO_MACRO=`echo ${MODULE} | tr 'a-z' 'A-Z'`
+
+LPWD=$(dirname `readlink -f $0`)
 
 YEAR=$(date '+%Y')
 S='$'
 exclamation='!'
 
-LICENSE_HEADER=\
-"/******************************************************************************
- * Copyright (C) 2014-2020 Zhifeng Gong <gozfree@163.com>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- ******************************************************************************/"
+LICENSE_HEADER=license_header.inc
+
 usage()
 {
 	echo "==== usage ===="
@@ -48,14 +31,14 @@ usage()
 
 mkdir_libfoo()
 {
-	mkdir ${MODULE}
-	cd ${MODULE}
+	mkdir gear-lib/${MODULE}
+	cd gear-lib/${MODULE}
 }
 
 autogen_libfoo_h()
 {
-cat > ${LIBFOO_H} <<!
-${LICENSE_HEADER}
+cat ${LPWD}/${LICENSE_HEADER} > ${LIBFOO_H}
+cat >> ${LIBFOO_H} <<!
 #ifndef ${LIBFOO_MACRO}_H
 #define ${LIBFOO_MACRO}_H
 
@@ -74,8 +57,8 @@ extern "C" {
 
 autogen_libfoo_c()
 {
-cat > ${LIBFOO_C} <<!
-${LICENSE_HEADER}
+cat ${LPWD}/${LICENSE_HEADER} > ${LIBFOO_C}
+cat >> ${LIBFOO_C} <<!
 #include "${LIBFOO_H}"
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,8 +68,8 @@ ${LICENSE_HEADER}
 
 autogen_test_libfoo_c()
 {
-cat > ${TEST_LIBFOO_C} <<!
-${LICENSE_HEADER}
+cat ${LPWD}/${LICENSE_HEADER} > ${TEST_LIBFOO_C}
+cat >> ${TEST_LIBFOO_C} <<!
 #include "${LIBFOO_H}"
 #include <stdio.h>
 #include <stdlib.h>
@@ -121,6 +104,7 @@ CC	= ${S}(CROSS_PREFIX)gcc
 CXX	= ${S}(CROSS_PREFIX)g++
 LD	= ${S}(CROSS_PREFIX)ld
 AR	= ${S}(CROSS_PREFIX)ar
+STRIP   = ${S}(CROSS_PREFIX)strip
 
 ifeq (${S}(COLOR_INC), ${S}(wildcard ${S}(COLOR_INC)))
 include ${S}(COLOR_INC)
@@ -151,7 +135,13 @@ OBJS_UNIT_TEST	= test_${S}(LIBNAME).o
 ###############################################################################
 # cflags and ldflags
 ###############################################################################
-CFLAGS	:= -g -Wall -Werror -fPIC
+ifeq (${S}(MODE), release)
+CFLAGS  := -O2 -Wall -Werror -fPIC
+LTYPE   := release
+else
+CFLAGS  := -g -Wall -Werror -fPIC
+LTYPE   := debug
+endif
 CFLAGS	+= ${S}(${S}(ARCH)_CFLAGS)
 CFLAGS	+= -I${S}(OUTPUT)/include
 
@@ -196,16 +186,17 @@ clean:
 
 install:
 	${S}(MAKEDIR_OUTPUT)
+	if [ "${S}(MODE)" = "release" ];then ${S}(STRIP) ${S}(TGT); fi
 	${S}(CP_V) -r ${S}(TGT_LIB_H)  ${S}(OUTPUT)/include
-	${S}(CP_V) -r ${S}(TGT_LIB_A)  ${S}(OUTPUT)/lib
-	${S}(CP_V) -r ${S}(TGT_LIB_SO) ${S}(OUTPUT)/lib
-	${S}(CP_V) -r ${S}(TGT_LIB_SO_VER) ${S}(OUTPUT)/lib
+	${S}(CP_V) -r ${S}(TGT_LIB_A)  ${S}(OUTPUT)/${S}(LTYPE)/lib
+	${S}(CP_V) -r ${S}(TGT_LIB_SO) ${S}(OUTPUT)/${S}(LTYPE)/lib
+	${S}(CP_V) -r ${S}(TGT_LIB_SO_VER) ${S}(OUTPUT)/${S}(LTYPE)/lib
 
 uninstall:
-	${S}(RM_V) -f ${S}(OUTPUT)/include/${S}(TGT_LIB_H)
-	${S}(RM_V) -f ${S}(OUTPUT)/lib/${S}(TGT_LIB_A)
-	${S}(RM_V) -f ${S}(OUTPUT)/lib/${S}(TGT_LIB_SO)
-	${S}(RM_V) -f ${S}(OUTPUT)/lib/${S}(TGT_LIB_SO_VER)
+	cd ${S}(OUTPUT)/include/ && rm -f ${S}(TGT_LIB_H)
+	${S}(RM_V) -f ${S}(OUTPUT)/${S}(LTYPE)/lib/${S}(TGT_LIB_A)
+	${S}(RM_V) -f ${S}(OUTPUT)/${S}(LTYPE)/lib/${S}(TGT_LIB_SO)
+	${S}(RM_V) -f ${S}(OUTPUT)/${S}(LTYPE)/lib/${S}(TGT_LIB_SO_VER)
 !
 }
 
@@ -218,6 +209,10 @@ include ${S}(CLEAR_VARS)
 
 LOCAL_MODULE := ${MODULE}
 
+ifeq (${S}(MODE), release)
+LOCAL_CFLAGS += -O2
+endif
+
 LIBRARIES_DIR	:= ${S}(LOCAL_PATH)/../
 
 LOCAL_C_INCLUDES := ${S}(LOCAL_PATH)
@@ -226,6 +221,66 @@ LOCAL_C_INCLUDES := ${S}(LOCAL_PATH)
 LOCAL_SRC_FILES := ${LIBFOO_C}
 
 include ${S}(BUILD_SHARED_LIBRARY)
+!
+}
+
+autogen_makefile_nmake()
+{
+cat > ${NMAKE} <<!
+###############################################################################
+# common
+###############################################################################
+#ARCH: linux/pi/android/ios/win
+LD	= link
+AR	= lib
+RM	= del
+###############################################################################
+# target and object
+###############################################################################
+LIBNAME		= ${MODULE}
+TGT_LIB_A	= ${S}(LIBNAME).lib
+TGT_LIB_SO	= ${S}(LIBNAME).dll
+TGT_UNIT_TEST	= test_${S}(LIBNAME).exe
+
+OBJS_LIB	= ${S}(LIBNAME).obj
+OBJS_UNIT_TEST	= test_${S}(LIBNAME).obj
+
+###############################################################################
+# cflags and ldflags
+###############################################################################
+CFLAGS	= /Iinclude /I.
+!IF "${S}(MODE)"=="release"
+CFLAGS  = ${S}(CFLAGS) /O2 /GF
+!ELSE
+CFLAGS  = ${S}(CFLAGS) /Od /W3 /Zi
+!ENDIF
+
+LDFLAGS	= /NOLOGO
+
+LIBS    = ws2_32.lib
+
+###############################################################################
+# target
+###############################################################################
+TGT	= ${S}(TGT_LIB_A)  ${S}(TGT_LIB_SO) ${S}(TGT_UNIT_TEST)
+
+OBJS	= ${S}(OBJS_LIB) ${S}(OBJS_UNIT_TEST)
+
+all: ${S}(TGT)
+
+${S}(TGT_LIB_A): ${S}(OBJS_LIB)
+	${S}(AR) ${S}(OBJS_LIB) ${S}(LIBS) /o:${S}(TGT_LIB_A)
+
+${S}(TGT_LIB_SO): ${S}(OBJS_LIB)
+	${S}(LD) ${S}(LDFLAGS) /Dll ${S}(OBJS_LIB) ${S}(LIBS) /o:${S}(TGT_LIB_SO)
+
+${S}(TGT_UNIT_TEST): ${S}(OBJS_UNIT_TEST)
+	${S}(CC) ${S}(TGT_LIB_A) ${S}(OBJS_UNIT_TEST) /o ${S}(TGT_UNIT_TEST)
+
+clean:
+	${S}(RM) ${S}(OBJS)
+	${S}(RM) ${S}(TGT)
+	${S}(RM) ${S}(TGT_LIB_SO)*
 !
 }
 
@@ -251,7 +306,7 @@ output=version.h
 
 LIBNAME=\`echo \${libname} | tr 'a-z' 'A-Z'\`
 export version=\${major}.\${minor}.\${patch}
-export buildid=\`git log -1 --pretty=format:"git-%cd-%h" --date=short .\`
+export buildid=\`git log -1 --pretty=format:"git-%cd-%h" --date=short 2>/dev/null\`
 autogen_version_h()
 {
 cat > version.h <<!
@@ -273,6 +328,14 @@ autogen_version_h
 chmod a+x ${VERSION_SH}
 }
 
+link_libfoo()
+{
+	cd ../../include/
+	ln -s ../gear-lib/${MODULE}/${LIBFOO_H} .
+	cd ../src/
+	ln -s ../gear-lib/${MODULE}/${LIBFOO_C} .
+}
+
 case $# in
 0)
 	usage;
@@ -286,7 +349,9 @@ autogen_libfoo_c
 autogen_libfoo_h
 autogen_test_libfoo_c
 autogen_makefile
+autogen_makefile_nmake
 autogen_version_sh
 autogen_android_mk
 autogen_readme_md
+link_libfoo
 
